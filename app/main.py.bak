@@ -1,0 +1,112 @@
+import os
+from fastapi import FastAPI, UploadFile, Request
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Load .env before anything else
+load_dotenv()
+
+from google import genai
+from mem0 import Memory
+
+from app.rag import process_docs, query_docs
+
+app = FastAPI()
+
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+# Gemini client (for answering questions)
+gemini = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+# mem0 — Gemini for LLM + Gemini for embeddings. No OpenAI key needed.
+mem0_config = {
+    "llm": {
+        "provider": "gemini",
+        "config": {
+            "model": "gemini-1.5-flash",
+            "temperature": 0.1,
+            "max_tokens": 1000,
+            "api_key": os.environ["GEMINI_API_KEY"],
+        }
+    },
+    "embedder": {
+        "provider": "gemini",
+        "config": {
+            "model": "models/text-embedding-004",
+            "api_key": os.environ["GEMINI_API_KEY"],
+        }
+    },
+    "vector_store": {
+        "provider": "faiss",
+        "config": {
+            "path": "data/mem0",
+            "embedding_model_dims": 768,
+        }
+    }
+}
+
+memory = Memory.from_config(mem0_config)
+
+
+class ChatRequest(BaseModel):
+    session_id: str
+    question: str
+
+
+@app.post("/upload")
+async def upload(file: UploadFile):
+    content = await file.read()
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return {"msg": "Only plain text (.txt) files are supported."}
+    process_docs(text)
+    return {"msg": f"✅ '{file.filename}' uploaded and indexed successfully!"}
+
+
+@app.post("/ask")
+async def ask(req: ChatRequest):
+    # Retrieve relevant memories for this session
+    past = memory.search(req.question, user_id=req.session_id)
+    memory_context = ""
+    if past and "results" in past:
+        memory_context = "\n".join([m["memory"] for m in past["results"]])
+
+    # Retrieve relevant doc chunks via RAG
+    doc_context = "\n".join(query_docs(req.question))
+
+    prompt = f"""You are a helpful AI assistant. Answer the user's question using the sources below.
+
+Conversation Memory (past exchanges):
+{memory_context if memory_context else "None yet."}
+
+Document Context (uploaded file):
+{doc_context}
+
+User Question: {req.question}
+
+Rules:
+- Prefer information from the Document Context.
+- Use Conversation Memory only if the document doesn't have the answer.
+- If neither has the answer, say: "I don't have that information in the uploaded document."
+- Be concise and clear.
+"""
+
+    response = gemini.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=prompt
+    )
+
+    # Save exchange to memory
+    memory.add(f"User: {req.question}", user_id=req.session_id)
+    memory.add(f"Assistant: {response.text}", user_id=req.session_id)
+
+    return {"answer": response.text}

@@ -1,0 +1,53 @@
+body {
+    font-family: Arial;
+    background: #f4f6f8;
+}
+
+.container {
+    width: 400px;
+    margin: auto;
+    margin-top: 40px;
+}
+
+.upload-box {
+    margin-bottom: 15px;
+}
+
+.chat-box {
+    height: 400px;
+    overflow-y: auto;
+    background: rgb(246, 193, 193);
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+}
+
+.input-box {
+    display: flex;
+    margin-top: 10px;
+}
+
+.input-box input {
+    flex: 1;
+    padding: 10px;
+}
+
+.input-box button {
+    padding: 10px;
+}
+
+.user {
+    text-align: right;
+    margin: 5px;
+    color: blue;
+}
+
+.bot {
+    text-align: left;
+    margin: 5px;
+    color: green;
+}
+#tes{
+    color: red;
+    text-align: center;
+}

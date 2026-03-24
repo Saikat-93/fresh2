@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RAG Chatbot</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="container">
+    <h2>📄 RAG Chatbot (Gemini)</h2>
+
+    <!-- Upload Section -->
+    <div class="upload-box">
+        <input type="file" id="fileInput">
+        <button onclick="uploadFile()">Upload Document</button>
+        <p id="uploadStatus"></p>
+    </div>
+
+    <!-- Chat Section -->
+    <div class="chat-box" id="chatBox"></div>
+
+    <div class="input-box">
+        <input type="text" id="question" placeholder="Ask question from document...">
+        <button onclick="askQuestion()">Send</button>
+    </div>
+    <h3 id="tes">NOTE: Only Upload Text Files (.txt)</h3>
+</div>
+
+
+<script>
+const session_id = "user1";  // you can later make this dynamic
+
+async function uploadFile() {
+    let file = document.getElementById("fileInput").files[0];
+
+    if (!file) {
+        alert("Please select a file");
+        return;
+    }
+
+    let formData = new FormData();
+    formData.append("file", file);
+
+    document.getElementById("uploadStatus").innerText = "Uploading...";
+
+    let res = await fetch("/upload", {
+        method: "POST",
+        body: formData
+    });
+
+    let data = await res.json();
+    document.getElementById("uploadStatus").innerText = data.msg;
+}
+
+
+function addMessage(text, type) {
+    let chatBox = document.getElementById("chatBox");
+
+    let msg = document.createElement("div");
+    msg.className = type;
+    msg.innerText = text;
+
+    chatBox.appendChild(msg);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+
+async function askQuestion() {
+    let question = document.getElementById("question").value;
+
+    if (!question) return;
+
+    addMessage("You: " + question, "user");
+
+    document.getElementById("question").value = "";
+
+    let res = await fetch("/ask", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            session_id: session_id,
+            question: question
+        })
+    });
+
+    let data = await res.json();
+
+    addMessage("Bot: " + data.answer, "bot");
+}
+</script>
+
+</body>
+</html>
